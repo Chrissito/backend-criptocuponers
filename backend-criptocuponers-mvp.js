@@ -17,7 +17,13 @@ const REWARD_PERCENT = Number(process.env.REWARD_PERCENT || 10);
 let wallet;
 
 async function initWallet() {
-  wallet = await Wallet.fromSeed(process.env.WALLET_SEED);
+  if (process.env.WALLET_WIF) {
+    wallet = await Wallet.fromWIF(process.env.WALLET_WIF);
+  } else if (process.env.WALLET_SEED) {
+    wallet = await Wallet.fromSeed(process.env.WALLET_SEED);
+  } else {
+    throw new Error("Falta WALLET_WIF o WALLET_SEED en Render");
+  }
 }
 
 function calcularRecompensa(monto) {
