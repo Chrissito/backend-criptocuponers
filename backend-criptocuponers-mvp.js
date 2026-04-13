@@ -34,8 +34,34 @@ function aUnidadesBase(tokens) {
   return BigInt(Math.round(tokens * 10 ** TOKEN_DECIMALS));
 }
 
-app.get("/health", (req, res) => {
-  res.json({ ok: true });
+async function getDebugInfo() {
+  const bchBalance = await wallet.getBalance();
+  const tokenBalance = await wallet.getTokenBalance(TOKEN_CATEGORY);
+  const tokenUtxos = await wallet.getTokenUtxos(TOKEN_CATEGORY);
+
+  return {
+    cashaddr: wallet.cashaddr,
+    tokenaddr: wallet.tokenaddr,
+    bchBalance: bchBalance.toString(),
+    tokenBalance: tokenBalance.toString(),
+    tokenUtxoCount: tokenUtxos.length,
+    tokenCategory: TOKEN_CATEGORY
+  };
+}
+
+app.get("/health", async (req, res) => {
+  try {
+    const info = await getDebugInfo();
+    res.json({
+      ok: true,
+      ...info
+    });
+  } catch (error) {
+    res.status(500).json({
+      ok: false,
+      error: error.message
+    });
+  }
 });
 
 app.post("/reward", async (req, res) => {
@@ -46,7 +72,15 @@ app.post("/reward", async (req, res) => {
 
     const { monto, walletDestino } = req.body;
 
-    const recompensa = calcularRecompensa(monto);
+    if (!Number.isFinite(Number(monto))) {
+      return res.status(400).json({ error: "Monto inválido" });
+    }
+
+    if (!walletDestino) {
+      return res.status(400).json({ error: "Wallet destino vacía" });
+    }
+
+    const recompensa = calcularRecompensa(Number(monto));
     const baseUnits = aUnidadesBase(recompensa);
 
     const tx = await wallet.send([
@@ -69,8 +103,16 @@ app.post("/reward", async (req, res) => {
   }
 });
 
-initWallet().then(() => {
-  app.listen(PORT, () => {
-    console.log("Servidor corriendo en puerto", PORT);
+initWallet()
+  .then(async () => {
+    const info = await getDebugInfo();
+    console.log("DEBUG WALLET INFO:", info);
+
+    app.listen(PORT, () => {
+      console.log("Servidor corriendo en puerto", PORT);
+    });
+  })
+  .catch((error) => {
+    console.error("Error al iniciar wallet:", error);
+    process.exit(1);
   });
-});
