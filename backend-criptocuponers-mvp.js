@@ -10,7 +10,6 @@ app.use(express.json());
 const PORT = process.env.PORT || 10000;
 const API_KEY = process.env.API_KEY;
 const TOKEN_CATEGORY = process.env.TOKEN_CATEGORY;
-const REWARD_PERCENT = Number(process.env.REWARD_PERCENT || 10);
 
 let wallet;
 
@@ -19,10 +18,6 @@ async function initWallet() {
     throw new Error("Falta WALLET_WIF");
   }
   wallet = await Wallet.fromWIF(process.env.WALLET_WIF);
-}
-
-function calcularRecompensa(monto) {
-  return Math.floor((Number(monto) * REWARD_PERCENT) / 100);
 }
 
 async function getDebugInfo() {
@@ -47,6 +42,40 @@ app.get("/health", async (_req, res) => {
   }
 });
 
+// prueba directa: manda 1 token a la MISMA tokenaddr del backend
+app.post("/selftest", async (req, res) => {
+  try {
+    if (req.headers["x-api-key"] !== API_KEY) {
+      return res.status(401).json({ error: "No autorizado" });
+    }
+
+    const before = await getDebugInfo();
+    console.log("SELFTEST BEFORE:", JSON.stringify(before));
+
+    const tx = await wallet.send([
+      new TokenSendRequest({
+        cashaddr: wallet.tokenaddr,
+        category: TOKEN_CATEGORY,
+        amount: 1n,
+        value: 1000n
+      })
+    ]);
+
+    const after = await getDebugInfo();
+    console.log("SELFTEST AFTER:", JSON.stringify(after));
+
+    res.json({
+      ok: true,
+      txid: tx.txId,
+      before,
+      after
+    });
+  } catch (error) {
+    console.error("SELFTEST ERROR:", error?.message || String(error));
+    res.status(500).json({ error: error.message });
+  }
+});
+
 app.post("/reward", async (req, res) => {
   try {
     if (req.headers["x-api-key"] !== API_KEY) {
@@ -63,27 +92,22 @@ app.post("/reward", async (req, res) => {
       return res.status(400).json({ error: "Wallet destino vacía" });
     }
 
-    const recompensa = calcularRecompensa(monto);
-    const amountToSend = BigInt(recompensa);
+    const recompensa = Math.floor((Number(monto) * 10) / 100);
 
     const before = await getDebugInfo();
-
     console.log("REWARD REQUEST:", JSON.stringify({
       monto,
       walletDestino,
       recompensa,
-      amountToSend: amountToSend.toString(),
       before
     }));
 
-    // IMPORTANTe:
-    // usa la dirección tal cual viene. Si es token-aware (z...), la manda así.
     const tx = await wallet.send([
       new TokenSendRequest({
         cashaddr: walletDestino,
         category: TOKEN_CATEGORY,
-        amount: amountToSend,
-        value: 1000n,
+        amount: BigInt(recompensa),
+        value: 1000n
       })
     ]);
 
