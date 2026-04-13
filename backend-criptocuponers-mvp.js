@@ -11,59 +11,46 @@ const PORT = process.env.PORT || 10000;
 const API_KEY = process.env.API_KEY;
 
 const TOKEN_CATEGORY = process.env.TOKEN_CATEGORY;
-const TOKEN_DECIMALS = Number(process.env.TOKEN_DECIMALS || 2);
 const REWARD_PERCENT = Number(process.env.REWARD_PERCENT || 10);
 
 let wallet;
 
+// Inicializar wallet
 async function initWallet() {
   if (process.env.WALLET_WIF) {
     wallet = await Wallet.fromWIF(process.env.WALLET_WIF);
-  } else if (process.env.WALLET_SEED) {
-    wallet = await Wallet.fromSeed(process.env.WALLET_SEED);
   } else {
-    throw new Error("Falta WALLET_WIF o WALLET_SEED en Render");
+    throw new Error("Falta WALLET_WIF en Render");
   }
 }
 
+// Calcular recompensa
 function calcularRecompensa(monto) {
-  return (monto * REWARD_PERCENT) / 100;
+  return Math.floor((monto * REWARD_PERCENT) / 100);
 }
 
-function aUnidadesBase(tokens) {
-  return BigInt(Math.round(tokens * 10 ** TOKEN_DECIMALS));
-}
-
-async function getDebugInfo() {
-  const bchBalance = await wallet.getBalance();
-  const tokenBalance = await wallet.getTokenBalance(TOKEN_CATEGORY);
-  const tokenUtxos = await wallet.getTokenUtxos(TOKEN_CATEGORY);
-
-  return {
-    cashaddr: wallet.cashaddr,
-    tokenaddr: wallet.tokenaddr,
-    bchBalance: bchBalance.toString(),
-    tokenBalance: tokenBalance.toString(),
-    tokenUtxoCount: tokenUtxos.length,
-    tokenCategory: TOKEN_CATEGORY
-  };
-}
-
+// Endpoint de salud (debug)
 app.get("/health", async (req, res) => {
   try {
-    const info = await getDebugInfo();
+    const bchBalance = await wallet.getBalance();
+    const tokenBalance = await wallet.getTokenBalance(TOKEN_CATEGORY);
+    const tokenUtxos = await wallet.getTokenUtxos(TOKEN_CATEGORY);
+
     res.json({
       ok: true,
-      ...info
+      cashaddr: wallet.cashaddr,
+      tokenaddr: wallet.tokenaddr,
+      bchBalance: bchBalance.toString(),
+      tokenBalance: tokenBalance.toString(),
+      tokenUtxoCount: tokenUtxos.length,
+      tokenCategory: TOKEN_CATEGORY
     });
   } catch (error) {
-    res.status(500).json({
-      ok: false,
-      error: error.message
-    });
+    res.status(500).json({ ok: false, error: error.message });
   }
 });
 
+// Endpoint para enviar recompensa
 app.post("/reward", async (req, res) => {
   try {
     if (req.headers["x-api-key"] !== API_KEY) {
@@ -81,13 +68,12 @@ app.post("/reward", async (req, res) => {
     }
 
     const recompensa = calcularRecompensa(Number(monto));
-    const baseUnits = aUnidadesBase(recompensa);
 
     const tx = await wallet.send([
       new TokenSendRequest({
         cashaddr: walletDestino,
         category: TOKEN_CATEGORY,
-        amount: baseUnits,
+        amount: BigInt(recompensa), // 🔥 SIN DECIMALES (arreglado)
         value: 1000n
       })
     ]);
@@ -103,10 +89,10 @@ app.post("/reward", async (req, res) => {
   }
 });
 
+// Arranque
 initWallet()
-  .then(async () => {
-    const info = await getDebugInfo();
-    console.log("DEBUG WALLET INFO:", info);
+  .then(() => {
+    console.log("Wallet lista:", wallet.cashaddr);
 
     app.listen(PORT, () => {
       console.log("Servidor corriendo en puerto", PORT);
