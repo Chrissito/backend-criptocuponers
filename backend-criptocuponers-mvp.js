@@ -57,7 +57,7 @@ app.post("/selftest", async (req, res) => {
         cashaddr: wallet.tokenaddr,
         category: TOKEN_CATEGORY,
         amount: 1n,
-        value: 1000n
+        value: 546n
       })
     ]);
 
@@ -107,7 +107,7 @@ app.post("/reward", async (req, res) => {
         cashaddr: walletDestino,
         category: TOKEN_CATEGORY,
         amount: BigInt(recompensa),
-        value: 1000n
+        value: 546n
       })
     ]);
 
